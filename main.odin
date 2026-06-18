@@ -1,125 +1,134 @@
 package main
 
-import "core:fmt"
 import "core:math"
 import "core:sort"
 import "core:strings"
-import "core:sys/linux"
-import "core:sys/posix"
-import "core:time"
+import rl "vendor:raylib"
 
-Screen_Width :: 120
-Screen_Height :: 40
+Window_Width :: 1280
+Window_Height :: 720
 
-Map_Height :: 16
-Map_Width :: 16
+Grid_Width :: 160
+Grid_Height :: 90
+
+Map_Height :: 32
+Map_Width :: 32
 
 Field_Of_View :: math.PI / 4
 Sight_Depth :: 16.0
 
 main :: proc() {
-	stdin_fd := posix.FD(0)
 
-	// obtener configuracion actual
-	term: posix.termios
-	posix.tcgetattr(stdin_fd, &term)
+	rl.InitWindow(Window_Width, Window_Height, "First Person Shooter")
+	rl.SetTargetFPS(60)
 
-	defer posix.tcsetattr(stdin_fd, .TCSANOW, &term) // al salir volver a la configuracion original
+	cell_w := f32(Window_Width) / Grid_Width
+	cell_h := f32(Window_Height) / Grid_Height
 
-	raw := term
-	raw.c_lflag -= {.ICANON, .ECHO} // desactivar buffer y echo
-	raw.c_cc[.VMIN] = 0 // no esperar N bytes minimo
-	raw.c_cc[.VTIME] = 0 // sin timeout
+	//screen := make([]rune, Grid_Width * Grid_Height)
 
-	posix.tcsetattr(stdin_fd, .TCSANOW, &raw)
+	//for idx in 0 ..< len(screen) {
+	//	screen[idx] = '.'
+	//}
 
-
-	screen := make([]rune, Screen_Width * Screen_Height)
-
-	for idx in 0 ..< len(screen) {
-		screen[idx] = '.'
-	}
-
-	player_x := 5.0
-	player_y := 5.0
+	player_x := 2.0
+	player_y := 2.0
 	player_angle := 0.0
 
 
 	mini_map := strings.builder_make()
 
-	strings.write_string(&mini_map, "################")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#.........######")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "#..............#")
-	strings.write_string(&mini_map, "################")
-
-	tp1 := time.now()
-	tp2 := time.now()
+	strings.write_string(&mini_map, "################################")
+	strings.write_string(&mini_map, "#...#..........#...............#")
+	strings.write_string(&mini_map, "#...#..........#...............#")
+	strings.write_string(&mini_map, "#.......#......#..........#....#")
+	strings.write_string(&mini_map, "#########......#..........#....#")
+	strings.write_string(&mini_map, "#..............#..........#....#")
+	strings.write_string(&mini_map, "#...############..........#....#")
+	strings.write_string(&mini_map, "#..............#..........#....#")
+	strings.write_string(&mini_map, "#..............#.....#....#....#")
+	strings.write_string(&mini_map, "#..............#.....######....#")
+	strings.write_string(&mini_map, "#..............#.....#.........#")
+	strings.write_string(&mini_map, "#.........######.....#.........#")
+	strings.write_string(&mini_map, "#....................#....#....#")
+	strings.write_string(&mini_map, "#.............########....#....#")
+	strings.write_string(&mini_map, "#.............#...........#....#")
+	strings.write_string(&mini_map, "#.............#...........#....#")
+	strings.write_string(&mini_map, "###############....#############")
+	strings.write_string(&mini_map, "#..............................#")
+	strings.write_string(&mini_map, "#..............................#")
+	strings.write_string(&mini_map, "#..............................#")
+	strings.write_string(&mini_map, "#..............................#")
+	strings.write_string(&mini_map, "#.........########.....#.......#")
+	strings.write_string(&mini_map, "#.........#............#.......#")
+	strings.write_string(&mini_map, "#.........#............#.......#")
+	strings.write_string(&mini_map, "#.........#............#.......#")
+	strings.write_string(&mini_map, "#.........#............#.......#")
+	strings.write_string(&mini_map, "#.........#............#.......#")
+	strings.write_string(&mini_map, "#.........#####........#.......#")
+	strings.write_string(&mini_map, "#.............#........#.......#")
+	strings.write_string(&mini_map, "#.............#........#.......#")
+	strings.write_string(&mini_map, "#.............#........#.......#")
+	strings.write_string(&mini_map, "################################")
 
 	// Game loop
-	for {
-		time.sleep(16 * time.Millisecond)
+	for !rl.WindowShouldClose() {
+		rl.BeginDrawing()
+		rl.ClearBackground(rl.BLACK)
 
-		tp2 = time.now()
-		delta := time.diff(tp1, tp2)
-		elapsed_time := time.duration_seconds(delta)
-
-		tp1 = tp2
+		elapsed_time := f64(rl.GetFrameTime())
 
 		// INPUT ======================
-		polls_fds := []linux.Poll_Fd{{fd = linux.Fd(0), events = {.IN}}}
-		_, poll_err := linux.poll(polls_fds, 0)
+		if rl.IsKeyDown(.A) {
+			player_angle -= 3 * elapsed_time
+		}
+		if rl.IsKeyDown(.D) {
+			player_angle += 3 * elapsed_time
+		}
+		if rl.IsKeyDown(.W) {
+			player_x += math.sin_f64(player_angle) * 3.0 * elapsed_time
+			player_y += math.cos_f64(player_angle) * 3.0 * elapsed_time
 
-		if poll_err == .NONE && .IN in polls_fds[0].revents {
-			key_buf: [1]u8
+			if mini_map.buf[int(player_y) * Map_Width + int(player_x)] == '#' {
+				player_x -= math.sin_f64(player_angle) * 3.0 * elapsed_time
+				player_y -= math.cos_f64(player_angle) * 3.0 * elapsed_time
+			}
 
-			n, read_err := linux.read(linux.Fd(0), key_buf[:])
+		}
+		if rl.IsKeyDown(.S) {
+			player_x -= math.sin_f64(player_angle) * 3.0 * elapsed_time
+			player_y -= math.cos_f64(player_angle) * 3.0 * elapsed_time
 
-			if n > 0 && read_err == .NONE {
-				key := key_buf[0]
-
-				switch (key) {
-				case 'a', 'A':
-					player_angle -= 3 * elapsed_time
-				case 'd', 'D':
-					player_angle += 3 * elapsed_time
-				case 'w', 'W':
-					player_x += math.sin_f64(player_angle) * 5.0 * elapsed_time
-					player_y += math.cos_f64(player_angle) * 5.0 * elapsed_time
-
-					if mini_map.buf[int(player_y) * Map_Width + int(player_x)] == '#' {
-						player_x -= math.sin_f64(player_angle) * 5.0 * elapsed_time
-						player_y -= math.cos_f64(player_angle) * 5.0 * elapsed_time
-					}
-
-				case 's', 'S':
-					player_x -= math.sin_f64(player_angle) * 5.0 * elapsed_time
-					player_y -= math.cos_f64(player_angle) * 5.0 * elapsed_time
-
-					if mini_map.buf[int(player_y) * Map_Width + int(player_x)] == '#' {
-						player_x += math.sin_f64(player_angle) * 5.0 * elapsed_time
-						player_y += math.cos_f64(player_angle) * 5.0 * elapsed_time
-					}
-				}
+			if mini_map.buf[int(player_y) * Map_Width + int(player_x)] == '#' {
+				player_x += math.sin_f64(player_angle) * 3.0 * elapsed_time
+				player_y += math.cos_f64(player_angle) * 3.0 * elapsed_time
 			}
 		}
+		if rl.IsKeyDown(.Q) {
+			player_x -= math.cos_f64(player_angle) * 3.0 * elapsed_time
+			player_y += math.sin_f64(player_angle) * 3.0 * elapsed_time
 
+			if mini_map.buf[int(player_y) * Map_Width + int(player_x)] == '#' {
+				player_x += math.cos_f64(player_angle) * 3.0 * elapsed_time
+				player_y -= math.sin_f64(player_angle) * 3.0 * elapsed_time
+			}
 
-		for x in 0 ..< Screen_Width {
+		}
+		if rl.IsKeyDown(.E) {
+			player_x += math.cos_f64(player_angle) * 3.0 * elapsed_time
+			player_y -= math.sin_f64(player_angle) * 3.0 * elapsed_time
+
+			if mini_map.buf[int(player_y) * Map_Width + int(player_x)] == '#' {
+				player_x -= math.cos_f64(player_angle) * 3.0 * elapsed_time
+				player_y += math.sin_f64(player_angle) * 3.0 * elapsed_time
+			}
+
+		}
+
+		for x in 0 ..< Grid_Width {
 
 			ray_angle :=
-				(player_angle - Field_Of_View / 2.0) + (f64(x) / f64(Screen_Width)) * Field_Of_View
+				(player_angle - Field_Of_View / 2.0) + (f64(x) / f64(Grid_Width)) * Field_Of_View
 
 			distance_to_wall := 0.0
 			hit_wall := false
@@ -162,61 +171,115 @@ main :: proc() {
 							return 0
 						})
 
-                        bound := 0.01
-                        if (math.acos(distance_dot[0][1]) < bound) do boundary = true
-                        if (math.acos(distance_dot[1][1]) < bound) do boundary = true
-                        //if (math.acos(distance_dot[2][1]) < bound) do boundary = true
+						bound := 0.01
+						if (math.acos(distance_dot[0][1]) < bound) do boundary = true
+						if (math.acos(distance_dot[1][1]) < bound) do boundary = true
 					}
 				}
 			}
 
-			ceiling := f64(Screen_Height / 2.0) - Screen_Height / distance_to_wall
-			floor := Screen_Height - ceiling
+			gh := f64(Grid_Height)
+			ceiling := gh / 2.0 - gh / distance_to_wall
+			floor := gh - ceiling
 
-			shade := ' '
+			shade: rl.Color = rl.BLACK
 
-			if (distance_to_wall <= Sight_Depth / 4.0) do shade = 0x2588
-			else if (distance_to_wall < Sight_Depth / 3.0) do shade = 0x2593
-			else if (distance_to_wall < Sight_Depth / 2.0) do shade = 0x2592
-			else if (distance_to_wall < Sight_Depth) do shade = 0x2591
-			else do shade = ' '
+			if (distance_to_wall <= Sight_Depth / 4.0) do shade = rl.Color{255, 255, 255, 255}
+			else if (distance_to_wall < Sight_Depth / 3.0) do shade = rl.Color{180, 180, 180, 255}
+			else if (distance_to_wall < Sight_Depth / 2.0) do shade = rl.Color{120, 120, 120, 255}
+			else if (distance_to_wall < Sight_Depth) do shade = rl.Color{60, 60, 60, 255}
+			else do shade = rl.BLACK
 
-            if boundary do shade = ' '
+			if boundary do shade = ' '
 
-			for y in 0 ..< Screen_Height {
+			for y in 0 ..< Grid_Height {
 				if f64(y) < ceiling {
-					screen[y * Screen_Width + x] = ' '
+					// no need for draw anything
+					rl.DrawRectangle(
+						i32(x) * i32(cell_w),
+						i32(y) * i32(cell_h),
+						i32(cell_w),
+						i32(cell_h),
+						rl.BLACK,
+					)
 				} else if f64(y) > ceiling && f64(y) <= floor {
-					screen[y * Screen_Width + x] = shade
+					// draw
+					rl.DrawRectangle(
+						i32(x) * i32(cell_w),
+						i32(y) * i32(cell_h),
+						i32(cell_w),
+						i32(cell_h),
+						shade,
+					)
 				} else {
-					b := 1.0 - (f64(y) - Screen_Height / 2.0) / (f64(Screen_Height) / 2.0)
+					b := 1.0 - (f64(y) - gh / 2.0) / (gh / 2.0)
 
-					if b < 0.25 do shade = '#'
-					else if b < 0.50 do shade = 'x'
-					else if b < 0.75 do shade = '.'
-					else if b < 0.9 do shade = '-'
+					if b < 0.25 do shade = rl.Color{200, 200, 200, 255}
+					else if b < 0.50 do shade = rl.Color{140, 140, 140, 255}
+					else if b < 0.75 do shade = rl.Color{80, 80, 80, 255}
+					else if b < 0.9 do shade = rl.Color{40, 40, 40, 255}
 
-					screen[y * Screen_Width + x] = shade
+					// draw
+					rl.DrawRectangle(
+						i32(x) * i32(cell_w),
+						i32(y) * i32(cell_h),
+						i32(cell_w),
+						i32(cell_h),
+						shade,
+					)
 				}
 			}
 		}
 
-		fmt.printf("%s", "\x1b[H")
-
-        for x in 0 ..< Map_Width {
-            for y in 0 ..< Map_Height {
-                screen[(y * Screen_Width) + x] = rune(mini_map.buf[int(y) * Map_Width + int(x)])
-            }
-        }
-
-        screen[int(player_y) * Screen_Width + int(player_x)] = 'P'
-		for row in 0 ..< Screen_Height {
-			start := row * Screen_Width
-			line := screen[start:start + Screen_Width]
-
-			fmt.printf("%s\n", line)
+		// mini map
+		for x in 0 ..< Map_Width {
+			for y in 0 ..< Map_Height {
+				rl.DrawRectangle(
+					i32(x) * i32(cell_w),
+					i32(y) * i32(cell_h),
+					i32(cell_w),
+					i32(cell_h),
+					shade_to_color(rune(mini_map.buf[y * Map_Width + x])),
+				)
+			}
 		}
 
+		// draw player
+		rl.DrawRectangle(
+			i32(player_x) * i32(cell_w),
+			i32(player_y) * i32(cell_h),
+			i32(cell_w),
+			i32(cell_h),
+			shade_to_color('P'),
+		)
+
+		rl.EndDrawing()
 	}
 
+	rl.CloseWindow()
+}
+
+shade_to_color :: proc(ch: rune) -> rl.Color {
+	switch ch {
+	case 0x2588:
+		return rl.Color{255, 255, 255, 255}
+	case 0x2593:
+		return rl.Color{180, 180, 180, 255}
+	case 0x2592:
+		return rl.Color{120, 120, 120, 255}
+	case 0x2591:
+		return rl.Color{60, 60, 60, 255}
+	case '#':
+		return rl.Color{200, 200, 200, 255}
+	case 'x':
+		return rl.Color{140, 140, 140, 255}
+	case '.':
+		return rl.Color{80, 80, 80, 255}
+	case '-':
+		return rl.Color{40, 40, 40, 255}
+	case 'P':
+		return rl.Color{0, 255, 0, 255}
+	case:
+		return rl.Color{0, 0, 0, 255}
+	}
 }
